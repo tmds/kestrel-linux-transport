@@ -606,7 +606,7 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
 
                 tsocket.StopReadFromSocket();
 
-                CleanupSocket(tsocket, SocketShutdown.Send);
+                CleanupSocketEnd(tsocket);
             }
         }
 
@@ -678,13 +678,9 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
 
         private static void RegisterForReadable(TSocket tsocket)
         {
-            bool registered = (tsocket.Flags & SocketFlags.EPollRegistered) != 0;
-            if (!registered)
-            {
-                tsocket.AddFlags(SocketFlags.EPollRegistered);
-            }
+            bool register = tsocket.SetRegistered();
             EPollInterop.EPollControl(tsocket.ThreadContext.EPollFd,
-                                      registered ? EPollOperation.Modify : EPollOperation.Add,
+                                      register ? EPollOperation.Add : EPollOperation.Modify,
                                       tsocket.Fd,
                                       EPollEvents.Readable | EPollEvents.OneShot,
                                       EPollData(tsocket.Fd));
@@ -704,14 +700,18 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                 }
                 else if (!readable0)
                 {
-                    error = new TaskCanceledException("The request was aborted");
+                    error = new ConnectionAbortedException();
                 }
                 while (availableBytes != 0)
                 {
                     var buffer = writer.Alloc(2048);
                     try
                     {
-                        Receive(tsocket.Fd, availableBytes, ref buffer);
+                        error = Receive(tsocket.Fd, availableBytes, ref buffer);
+                        if (error != null)
+                        {
+                            break;
+                        }
                         availableBytes = 0;
                         var flushResult = await buffer.FlushAsync();
                         bool readable = true;
@@ -723,7 +723,7 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                         }
                         else if (flushResult.IsCancelled || !readable)
                         {
-                            error = new TaskCanceledException("The request was aborted");
+                            error = new ConnectionAbortedException();
                         }
                     }
                     catch (Exception e)
@@ -746,11 +746,11 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                 tsocket.ConnectionContext.Abort(error);
                 writer.Complete(error);
 
-                CleanupSocket(tsocket, SocketShutdown.Receive);
+                CleanupSocketEnd(tsocket);
             }
         }
 
-        private static unsafe void Receive(int fd, int availableBytes, ref WritableBuffer wb)
+        private static unsafe Exception Receive(int fd, int availableBytes, ref WritableBuffer wb)
         {
             int ioVectorLength = availableBytes <= wb.Buffer.Length ? 1 :
                     Math.Min(1 + (availableBytes - wb.Buffer.Length + MaxPooledBlockLength - 1) / MaxPooledBlockLength, MaxIOVectorReceiveLength);
@@ -803,7 +803,7 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                     {
                         // We made it!
                         wb.Advance(received - advanced);
-                        return;
+                        return null;
                     }
                     eAgainCount = 0;
                     // Update ioVectors to match bytes read
@@ -822,22 +822,24 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                     eAgainCount++;
                     if (eAgainCount == MaxEAgainCount)
                     {
-                        throw new NotSupportedException("Too many EAGAIN, unable to receive available bytes.");
+                        return new NotSupportedException("Too many EAGAIN, unable to receive available bytes.");
                     }
+                }
+                else if (result == PosixResult.ECONNRESET)
+                {
+                    return new ConnectionResetException(result.ErrorDescription(), result.AsException());
                 }
                 else
                 {
-                    result.ThrowOnError();
+                    return result.AsException();
                 }
             } while (true);
         }
 
-        private static void CleanupSocket(TSocket tsocket, SocketShutdown shutdown)
+        private static void CleanupSocketEnd(TSocket tsocket)
         {
-            var oldFlags = tsocket.AddFlags(shutdown == SocketShutdown.Send ? SocketFlags.ShutdownSend : SocketFlags.ShutdownReceive);
-            var other = shutdown == SocketShutdown.Send ? SocketFlags.ShutdownReceive : SocketFlags.ShutdownSend;
-            var close = (oldFlags & other) != 0;
-            if (close)
+            var bothClosed = tsocket.CloseEnd();
+            if (bothClosed)
             {
                 // First remove from the Dictionary, so we can't match with a new fd.
                 tsocket.ThreadContext.RemoveSocket(tsocket.Fd);

@@ -43,7 +43,7 @@ namespace SampleApp
                 await context.Response.WriteAsync(response);
             });
         }
-
+	public static int ResponseSize = 0;
         public static void Main(string[] args)
         {
             if (args.Contains("--help"))
@@ -87,6 +87,10 @@ namespace SampleApp
                 {
                     threadCount = int.Parse(arg.Substring(2));
                 }
+		else if (arg.StartsWith("-s"))
+		{
+		    ResponseSize = int.Parse(arg.Substring(2));
+		}
             }
             if (ic)
             {
@@ -111,6 +115,7 @@ namespace SampleApp
                 .UseKestrel(options =>
                 {
                     options.ApplicationSchedulingMode = tt ? SchedulingMode.Inline : SchedulingMode.ThreadPool;
+			options.Listen(IPAddress.Parse("1.1.1.2"), 5000, listenOptions => {} );
                 })
                 .UseStartup<Startup>();
 

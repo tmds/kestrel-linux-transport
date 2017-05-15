@@ -6,13 +6,15 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using SampleApp;
 
 namespace Benchmarks.Middleware
 {
     public class PlaintextMiddleware
     {
         private static readonly PathString _path = new PathString("/plaintext");
-        private static readonly byte[] _helloWorldPayload = Encoding.UTF8.GetBytes("Hello, World!");
+        private static readonly int _size = Startup.ResponseSize;
+        private static readonly byte[] _helloWorldPayload = _size == 0 ? Encoding.UTF8.GetBytes("Hello, World!") : new byte[_size];
 
         private readonly RequestDelegate _next;
 

@@ -355,17 +355,19 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                 }
                 int epollFd = threadContext.EPollFd;
                 var readEnd = threadContext.PipeEnds.ReadEnd;
-                int notPacked = !EPoll.PackedEvents ? 1 : 0;
-                var buffer = stackalloc int[EventBufferLength * (3 + notPacked)];
+                int eventSize = 3 + (!EPoll.PackedEvents ? 1 : 0);
+                var buffer = stackalloc int[EventBufferLength * eventSize];
                 int statReadEvents = 0;
                 int statWriteEvents = 0;
                 int statAcceptEvents = 0;
                 int statAccepts = 0;
                 var sockets = threadContext.Sockets;
 
-                var acceptableSockets = new List<TSocket>(1);
-                var readableSockets = new List<TSocket>(EventBufferLength);
-                var writableSockets = new List<TSocket>(EventBufferLength);
+                TSocket acceptSocket = null;
+                var readableSockets = new TSocket[EventBufferLength];
+                var writableSockets = new TSocket[EventBufferLength];
+                int readableSocketCount = 0;
+                int writableSocketCount = 0;
                 bool pipeReadable = false;
 
                 CompleteStateChange(State.Started);
@@ -398,7 +400,7 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                             // 3:~~~~~~~~~~         Int2 = Key
                             //                      ~~~~~~~~~~
                             int key = ptr[2];
-                            ptr += 3 + notPacked;
+                            ptr += eventSize;
                             TSocket tsocket;
                             if (sockets.TryGetValue(key & ~DupKeyMask, out tsocket))
                             {
@@ -408,17 +410,16 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                                     bool read = (key & DupKeyMask) == 0;
                                     if (read)
                                     {
-                                        readableSockets.Add(tsocket);
+                                        readableSockets[readableSocketCount++] = tsocket;
                                     }
                                     else
                                     {
-                                        writableSockets.Add(tsocket);
+                                        writableSockets[writableSocketCount++] = tsocket;
                                     }
                                 }
                                 else
                                 {
-                                    statAcceptEvents++;
-                                    acceptableSockets.Add(tsocket);
+                                    acceptSocket = tsocket;
                                 }
                             }
                             else if (key == pipeKey)
@@ -429,28 +430,32 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                     }
 
                     // handle accepts
-                    statAcceptEvents += acceptableSockets.Count;
-                    for (int i = 0; i < acceptableSockets.Count; i++)
+                    if (acceptSocket != null)
                     {
-                        statAccepts += HandleAccept(acceptableSockets[i], threadContext);
+                        statAcceptEvents++;
+                        statAccepts += HandleAccept(acceptSocket, threadContext);
+                        acceptSocket = null;
                     }
-                    acceptableSockets.Clear();
 
                     // handle writes
-                    statWriteEvents += writableSockets.Count;
-                    for (int i = 0; i < writableSockets.Count; i++)
+                    statWriteEvents += writableSocketCount;
+                    for (int i = 0; i < writableSocketCount; i++)
                     {
-                        writableSockets[i].CompleteWritable();
+                        var tsocket = writableSockets[i];
+                        writableSockets[i] = null;
+                        tsocket.CompleteWritable();
                     }
-                    writableSockets.Clear();
+                    writableSocketCount = 0;
 
                     // handle reads
-                    statReadEvents += readableSockets.Count;
-                    for (int i = 0; i < readableSockets.Count; i++)
+                    statReadEvents += readableSocketCount;
+                    for (int i = 0; i < readableSocketCount; i++)
                     {
-                        readableSockets[i].CompleteReadable();
+                        var tsocket = readableSockets[i];
+                        readableSockets[i] = null;
+                        tsocket.CompleteReadable();
                     }
-                    readableSockets.Clear();
+                    readableSocketCount = 0;
 
                     // handle pipe
                     if (pipeReadable)

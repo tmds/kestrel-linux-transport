@@ -62,10 +62,11 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
             void IScheduler.Schedule(Action<object> action, object state)
             {
                 int epollState;
+                var scheduledAction = new ScheduledAction { Action = action, State = state };
                 lock (_schedulerGate)
                 {
                     epollState = Interlocked.CompareExchange(ref _epollState, EPollNotBlocked, EPollBlocked);
-                    _schedulerAdding.Enqueue(new ScheduledAction { Action = action, State = state });
+                    _schedulerAdding.Enqueue(scheduledAction);
                 }
                 if (epollState == EPollBlocked)
                 {
@@ -145,7 +146,6 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                 var sockets = Sockets;
                 lock (sockets)
                 {
-                    var initialCount = sockets.Count;
                     sockets.Remove(tsocketKey);
                     if (sockets.Count == 0)
                     {

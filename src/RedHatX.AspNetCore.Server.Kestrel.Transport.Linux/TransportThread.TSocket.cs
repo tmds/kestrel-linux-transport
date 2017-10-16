@@ -62,9 +62,10 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
             }
 
             public ThreadContext ThreadContext;
-            public int         Fd;
+            public int         Key;
             public Socket      Socket;
             public Socket      DupSocket;
+            public int         Fd => Socket.DangerousGetHandle().ToInt32();
 
             private Action _writableCompletion;
             public bool SetWritableContinuation(Action continuation)

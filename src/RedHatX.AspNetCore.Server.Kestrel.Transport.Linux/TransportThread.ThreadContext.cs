@@ -18,7 +18,7 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                 TransportThread = transportThread;
                 ConnectionHandler = connectionHandler;
 
-                Sockets = new Dictionary<int, TSocket>();
+                Sockets = new SocketDictionary();
                 Logger = logger;
                 AcceptSockets = new List<TSocket>();
                 _schedulerAdding = new Queue<ScheduledAction>(1024);
@@ -44,7 +44,7 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
 
             public readonly TransportThread TransportThread;
             // key is the file descriptor
-            public readonly Dictionary<int, TSocket> Sockets;
+            public readonly SocketDictionary Sockets;
             public PipeFactory PipeFactory;
             public readonly List<TSocket> AcceptSockets;
 

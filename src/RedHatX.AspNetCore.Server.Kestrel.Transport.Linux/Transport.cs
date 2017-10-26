@@ -54,6 +54,19 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                 throw new ArgumentException(nameof(ipEndPointInformation));
             }
 
+            // Some options are only supported for IPEndPoint
+            if (_endPoint.Type != ListenType.IPEndPoint)
+            {
+                if (transportOptions.AcceptMode == AcceptMode.KernelLoadBalancing)
+                {
+                    transportOptions.AcceptMode = AcceptMode.AcceptThread;
+                }
+                if (transportOptions.DeferAccept)
+                {
+                    transportOptions.DeferAccept = false;
+                }
+            }
+
             _endPoint = ipEndPointInformation;
             _connectionHandler = connectionHandler;
             _transportOptions = transportOptions;
@@ -74,7 +87,67 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                 }
                 _state = State.Binding;
 
-                IPEndPoint ipEndPoint;
+                if (_transportOptions.AcceptMode == AcceptMode.AcceptThread)
+                {
+                    Socket socket;
+                    if (_endPoint.Type == ListenType.IPEndPoint)
+                    {
+                        IPEndPoint endPoint = _endPoint.IPEndPoint;
+                        bool ipv4 = endPoint.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
+                        socket = Socket.Create(ipv4 ? AddressFamily.InterNetwork : AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp, blocking: false);
+                        if (!ipv4)
+                        {
+                            // Kestrel does mapped ipv4 by default.
+                            socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, 0);
+                        }
+                        // Linux: allow bind during linger time
+                        socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, 1);
+                        if (_transportOptions.DeferAccept)
+                        {
+                            // Linux: wait up to 1 sec for data to arrive before accepting socket
+                            socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.DeferAccept, 1);
+                        }
+
+                        socket.Bind(endPoint);
+                        endPoint.Port = socket.GetLocalIPAddress().Port;
+
+                        socket.Listen(ListenBacklog);
+                    }
+                    else if (_endPoint.Type == ListenType.SocketPath)
+                    {
+                        socket = Socket.Create(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified, blocking: false);
+                        File.Delete(_endPoint.SocketPath);
+                        socket.Bind(_endPoint.SocketPath);
+                        socket.Listen(ListenBacklog);
+                    }
+                    else if (_endPoint.Type == ListenType.FileHandle)
+                    {
+                        socket = new Socket((int)_endPoint.FileHandle);
+                    }
+                    else
+                    {
+                        throw new NotSupportedException($"Unknown ListenType: {_endPoint.Type}.");
+                    }
+                    acceptThread = new AcceptThread(socket);
+                    transportThreads = CreateTransportThreads(ipEndPoint: null, acceptThread: acceptThread);
+                }
+                else if (_transportOptions.AcceptMode == AcceptMode.KernelLoadBalancing)
+                {
+                    if (_endPoint.Type == ListenType.IPEndPoint)
+                    {
+                        transportThreads = CreateTransportThreads(_endPoint.IPEndPoint, acceptThread: null);
+                    }
+                    else
+                    {
+                        throw new NotSupportedException($"ListenType: {_endPoint.Type} does not support {_transportOptions.AcceptMode}.");
+                    }
+                }
+                else
+                {
+                    throw new NotSupportedException($"Unknown AcceptMode: {_transportOptions.AcceptMode}.");
+                }
+
+                IPEndPoint ipEndPoint = null;
                 switch (_endPoint.Type)
                 {
                     case ListenType.IPEndPoint:

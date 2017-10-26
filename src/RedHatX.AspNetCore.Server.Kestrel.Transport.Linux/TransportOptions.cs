@@ -11,6 +11,8 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
 
         public bool DeferSend { get; set; } = true;
 
+        public AcceptMode AcceptMode { get; set; } = AcceptMode.KernelLoadBalancing;
+
         internal CpuSet CpuSet { get; set; }
 
         public int ThreadCount

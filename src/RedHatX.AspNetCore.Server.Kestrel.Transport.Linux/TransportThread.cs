@@ -359,6 +359,10 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
                     if (_acceptThread != null)
                     {
                         flags = SocketFlags.TypePassFd;
+                        if (_transportOptions.DeferAccept)
+                        {
+                            flags |= SocketFlags.DeferAccept;
+                        }
                         acceptSocket = _acceptThread.CreateReceiveSocket();
                     }
                     else

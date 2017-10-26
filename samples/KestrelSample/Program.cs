@@ -53,6 +53,7 @@ namespace SampleApp
                 Console.WriteLine("\tlibuv    Use libuv Transport instead of Linux Transport");
                 Console.WriteLine("\t-t<tc>   Number of transport threads");
                 Console.WriteLine("\tnott     Defer requests to thread pool");
+                Console.WriteLine("\tnolb     Don't use kernel load balancing");
                 Console.WriteLine("  Linux transport specific:");
                 // Console.WriteLine("\tta       Set thread affinity");
                 // Console.WriteLine("\tic       Receive on incoming cpu (implies ta)");
@@ -73,6 +74,7 @@ namespace SampleApp
             bool ds = !args.Contains("nods");
             bool da = !args.Contains("noda");
             bool tt = !args.Contains("nott");
+            bool lb = !args.Contains("nott");;
             _log = args.Contains("log");
             int threadCount = 0;
             // CpuSet cpuSet = default(CpuSet);
@@ -107,7 +109,7 @@ namespace SampleApp
             else
             {
                 // Console.WriteLine($"Using Linux Transport: Cpus={cpuSet}, ThreadCount={threadCount}, IncomingCpu={ic}, SetThreadAffinity={ta}, DeferAccept={da}, UseTransportThread={tt}");
-                Console.WriteLine($"Using Linux Transport: ThreadCount={threadCount}, DeferAccept={da}, UseTransportThread={tt}");
+                Console.WriteLine($"Using Linux Transport: ThreadCount={threadCount}, DeferAccept={da}, UseTransportThread={tt}, KernelLoadBalancing={lb}");
             }
 
             var hostBuilder = new WebHostBuilder()
@@ -131,6 +133,7 @@ namespace SampleApp
                     options.DeferAccept = da;
                     options.DeferSend = ds;
                     //options.CpuSet = cpuSet;
+                    options.AcceptMode = lb ? AcceptMode.KernelLoadBalancing : AcceptMode.AcceptThread;
                 });
             }
 

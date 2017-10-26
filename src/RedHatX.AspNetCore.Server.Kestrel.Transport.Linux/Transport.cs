@@ -55,7 +55,7 @@ namespace RedHatX.AspNetCore.Server.Kestrel.Transport.Linux
             }
 
             // Some options are only supported for IPEndPoint
-            if (_endPoint.Type != ListenType.IPEndPoint)
+            if (ipEndPointInformation.Type != ListenType.IPEndPoint)
             {
                 if (transportOptions.AcceptMode == AcceptMode.KernelLoadBalancing)
                 {

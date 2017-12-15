@@ -964,6 +964,8 @@ PosixResult RHXKL_Duplicate(intptr_t socket, intptr_t* dup)
     return ToPosixResult(rv);
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant" // expanded from macro 'CMSG_FIRSTHDR'
 PosixResult RHXKL_ReceiveHandle(intptr_t socket, intptr_t* receiveHandle, int32_t blocking)
 {
     if (receiveHandle == nullptr)
@@ -998,7 +1000,7 @@ PosixResult RHXKL_ReceiveHandle(intptr_t socket, intptr_t* receiveHandle, int32_
 
     if (rv != -1)
     {
-        for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(&header); cmsg != NULL; cmsg = CMSG_NXTHDR(&header,cmsg))
+        for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(&header); cmsg != nullptr; cmsg = CMSG_NXTHDR(&header,cmsg))
         {
             if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
             {
@@ -1068,6 +1070,7 @@ PosixResult RHXKL_AcceptAndSendHandleTo(intptr_t acceptSocket, intptr_t toSocket
 
     return ToPosixResult(rv);
 }
+#pragma clang diagnostic pop
 
 PosixResult RHXKL_SocketPair(int32_t addressFamily, int32_t socketType, int32_t protocolType, int32_t blocking, intptr_t* socket1, intptr_t* socket2)
 {

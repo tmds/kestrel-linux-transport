@@ -14,6 +14,7 @@ using Benchmarks.Middleware;
 using RedHatX.AspNetCore.Server.Kestrel.Transport.Linux;
 using Microsoft.AspNetCore.Server.Kestrel.Transport.Abstractions.Internal;
 using System.Linq;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 namespace SampleApp
 {
@@ -37,13 +38,52 @@ namespace SampleApp
 
         public static void Main(string[] args)
         {
+            var config = new ConfigurationBuilder()
+                .AddEnvironmentVariables(prefix: "ASPNETCORE_")
+                .AddCommandLine(args)
+                .Build();
+
             var hostBuilder = new WebHostBuilder()
-                .UseKestrel()
+                .UseKestrel((context, options) =>
+                {
+                    IPEndPoint endPoint = context.Configuration.CreateIPEndPoint();
+
+                    options.Listen(endPoint);
+                })
                 .UseLinuxTransport()
                 .UseStartup<Startup>();
 
             var host = hostBuilder.Build();
             host.Run();
         }
+    }
+
+    static class ConfigurationExtensions
+    {
+        public static IPEndPoint CreateIPEndPoint(this IConfiguration config)
+        {
+            var url = config["server.urls"] ?? config["urls"];
+
+            if (string.IsNullOrEmpty(url))
+            {
+                return new IPEndPoint(IPAddress.Loopback, 8080);
+            }
+
+            var address = ServerAddress.FromUrl(url);
+
+            IPAddress ip;
+
+            if (string.Equals(address.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+            {
+                ip = IPAddress.Loopback;
+            }
+            else if (!IPAddress.TryParse(address.Host, out ip))
+            {
+                ip = IPAddress.IPv6Any;
+            }
+
+            return new IPEndPoint(ip, address.Port);
+        }
+
     }
 }

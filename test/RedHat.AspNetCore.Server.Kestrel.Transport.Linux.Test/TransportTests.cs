@@ -3,18 +3,33 @@ using System.Buffers;
 using System.IO;
 using System.IO.Pipelines;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Connections;
 using RedHat.AspNetCore.Server.Kestrel.Transport.Linux;
 using Xunit;
+using Xunit.Sdk;
 using static Tmds.Linux.LibC;
 
 namespace Tests
 {
     public abstract class TransportTestsBase
     {
+        private class DisplayTestNameAttribute : BeforeAfterTestAttribute
+        {
+            public override void Before(MethodInfo methodUnderTest)
+            {
+                Console.WriteLine($"Before '{methodUnderTest.ReflectedType.Name}.{methodUnderTest.Name}.'");
+            }
+
+            public override void After(MethodInfo methodUnderTest)
+            {
+                Console.WriteLine($"After '{methodUnderTest.ReflectedType.Name}.{methodUnderTest.Name}.'");
+            }
+        }
+
         protected abstract TestServerOptions CreateOptions();
 
         private TestServer CreateTestServer(Action<TestServerOptions> configure = null)
@@ -29,7 +44,7 @@ namespace Tests
 
         [InlineData(true)]
         [InlineData(false)]
-        [Theory]
+        [Theory][DisplayTestName]
         public async Task Echo_DeferAccept(bool deferAccept)
         {
             using (var testServer = CreateTestServer(options => options.DeferAccept = deferAccept))
@@ -50,7 +65,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task MultiThread()
         {
             using (var testServer = CreateTestServer(options => options.ThreadCount = 2))
@@ -61,7 +76,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task Unbind()
         {
             using (var testServer = CreateTestServer())
@@ -74,7 +89,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task StopDisconnectsClient()
         {
             var outputTcs = new TaskCompletionSource<PipeWriter>();
@@ -118,7 +133,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task Writable()
         {
             const int bufferSize = 2048;
@@ -175,7 +190,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task Write_Timeout()
         {
             const int bufferSize = 2048;
@@ -225,7 +240,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task CompletingOutputCancelsInput()
         {
             var inputCompletedTcs = new TaskCompletionSource<object>();
@@ -257,7 +272,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task Receive()
         {
             // client send 1M bytes which are an int counter
@@ -307,7 +322,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task Send()
         {
             // server send 1M bytes which are an int counter
@@ -351,7 +366,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task UnixSocketListenType()
         {
             TestServerConnectionDispatcher connectionDispatcher = async (input, output, _) =>
@@ -402,7 +417,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task FailedBindThrows()
         {
             int port = 50;
@@ -415,7 +430,7 @@ namespace Tests
             }
         }
 
-        [Fact]
+        [Fact][DisplayTestName]
         public async Task BatchedSendReceive()
         {
             // We block the TransportThread to ensure 2 clients are sending multiple buffers with random data.
